@@ -28,9 +28,9 @@ export default function PredictiveAlerts() {
         <div className="space-y-6 max-w-7xl">
             <div>
                 <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                    <Bell className="text-primary-light" /> Predictive Risk Alerts
+                    <Bell className="text-primary-light" /> Risk Alerts
                 </h1>
-                <p className="text-sm text-slate-400 mt-1">24-48hr AI Weather & Disruption Forecasts</p>
+                <p className="text-sm text-slate-400 mt-1">Weather & Disruption Forecasts (24-48h)</p>
             </div>
 
             <div className="grid lg:grid-cols-2 gap-6">
@@ -92,7 +92,7 @@ function AlertCard({ forecast }) {
             </div>
 
             <div className="pt-4 border-t border-white/[0.06]">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Generated Push Notification for Workers</div>
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Notification Preview</div>
                 <div className="p-3 bg-dark-900 rounded-lg border border-white/5 font-mono text-sm text-slate-300">
                     {forecast.workerMessage}
                 </div>

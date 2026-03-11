@@ -1,8 +1,11 @@
 // ============================
-// GigGuard AI — AI Risk Assessment Engine
+// FlexCover — Risk Assessment Engine (with AI fallback)
 // ============================
+import { assessRiskWithAI } from './geminiRiskEngine.js';
 
-// Calculates weekly premium dynamically based on multiple risk factors
+/**
+ * Deterministic risk calculator — used as fallback when Gemini is unavailable.
+ */
 export function calculateRisk({ zone, avgDailyHours, avgDailyEarnings, platform }) {
     let riskScore = 0;
 
@@ -35,16 +38,16 @@ export function calculateRisk({ zone, avgDailyHours, avgDailyEarnings, platform 
     // Normalize to 0-100
     riskScore = Math.min(100, Math.max(0, riskScore));
 
-    // Calculate weekly premium tier
+    // Calculate weekly premium (dynamic tiers)
     let weeklyPremium, riskCategory;
     if (riskScore >= 65) {
-        weeklyPremium = 40;
+        weeklyPremium = Math.round(90 + (riskScore - 65) * (60 / 35)); // ₹90-150
         riskCategory = 'high';
     } else if (riskScore >= 35) {
-        weeklyPremium = 25;
+        weeklyPremium = Math.round(50 + (riskScore - 35) * (40 / 30)); // ₹50-90
         riskCategory = 'medium';
     } else {
-        weeklyPremium = 15;
+        weeklyPremium = Math.round(15 + riskScore * (35 / 35)); // ₹15-50
         riskCategory = 'low';
     }
 
@@ -56,6 +59,7 @@ export function calculateRisk({ zone, avgDailyHours, avgDailyEarnings, platform 
         riskCategory,
         weeklyPremium,
         coverageLimit,
+        source: 'deterministic',
         factors: {
             locationRisk: zone.riskLevel,
             floodProne: zone.floodProne,
@@ -65,4 +69,22 @@ export function calculateRisk({ zone, avgDailyHours, avgDailyEarnings, platform 
             platform
         }
     };
+}
+
+/**
+ * Primary risk assessment — tries Gemini AI first, falls back to deterministic.
+ */
+export async function assessRisk({ zone, avgDailyHours, avgDailyEarnings, platform, city }) {
+    // Try AI-powered assessment
+    const aiResult = await assessRiskWithAI({ zone, avgDailyHours, avgDailyEarnings, platform, city });
+
+    if (aiResult) {
+        return {
+            ...aiResult,
+            source: 'gemini',
+        };
+    }
+
+    // Fall back to deterministic
+    return calculateRisk({ zone, avgDailyHours, avgDailyEarnings, platform });
 }

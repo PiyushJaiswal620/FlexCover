@@ -67,14 +67,14 @@ export default function Onboarding() {
             {/* Logo */}
             <div className="relative z-10 mb-8 text-center animate-fade-in">
                 <div className="flex items-center justify-center gap-3 mb-3">
-                    <div className="w-14 h-14 rounded-2xl gradient-india flex items-center justify-center text-white font-bold text-2xl shadow-xl">
-                        G
+                    <div className="w-12 h-12 rounded-2xl bg-[#6366f1] flex items-center justify-center text-white font-bold text-xl">
+                        F
                     </div>
                 </div>
-                <h1 className="text-3xl font-bold text-white">
-                    GigGuard<span className="text-gradient">AI</span>
+                <h1 className="text-3xl font-bold text-white tracking-tight">
+                    FlexCover
                 </h1>
-                <p className="text-slate-400 mt-1 text-sm">Parametric Income Protection for Gig Workers</p>
+                <p className="text-slate-400 mt-1 text-sm">Coverage for Gig Workers</p>
             </div>
 
             {/* Step indicator */}
@@ -309,11 +309,11 @@ export default function Onboarding() {
                 {/* Step 5: Success / Risk Profile */}
                 {step === 5 && riskResult && (
                     <div className="text-center space-y-5 animate-fade-in">
-                        <div className="w-20 h-20 rounded-full gradient-india mx-auto flex items-center justify-center animate-pulse-glow">
+                        <div className="w-20 h-20 rounded-full bg-[#6366f1] mx-auto flex items-center justify-center">
                             <Shield className="text-white" size={36} />
                         </div>
                         <h2 className="text-2xl font-bold text-white">You're Protected! 🎉</h2>
-                        <p className="text-sm text-slate-400">Your AI risk profile has been generated</p>
+                        <p className="text-sm text-slate-400">Your coverage is ready</p>
 
                         <div className="grid grid-cols-3 gap-3 mt-6">
                             <div className="glass p-3 rounded-xl">
@@ -361,7 +361,7 @@ export default function Onboarding() {
                             {loading ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                             ) : step === 4 ? (
-                                <>Generate Risk Profile <Zap size={16} /></>
+                                <>Submit Application <ChevronRight size={16} /></>
                             ) : (
                                 <>Next <ChevronRight size={16} /></>
                             )}

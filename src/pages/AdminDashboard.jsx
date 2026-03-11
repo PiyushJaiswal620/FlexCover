@@ -36,7 +36,7 @@ export default function AdminDashboard() {
     return (
         <div className="space-y-6 max-w-7xl">
             <div>
-                <h1 className="text-2xl font-bold text-white">Insurer Admin Console</h1>
+                <h1 className="text-2xl font-bold text-white">Admin Dashboard</h1>
                 <p className="text-sm text-slate-400 mt-1">Platform-wide risk and claims analytics</p>
             </div>
 

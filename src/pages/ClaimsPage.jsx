@@ -20,7 +20,7 @@ export default function ClaimsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Claims Management</h1>
-                    <p className="text-sm text-slate-400 mt-1">Review parametric triggers and automated payouts</p>
+                    <p className="text-sm text-slate-400 mt-1">Review triggers and payouts</p>
                 </div>
                 <div className="flex gap-2">
                     {['all', 'approved', 'flagged'].map(f => (
@@ -28,8 +28,8 @@ export default function ClaimsPage() {
                             key={f}
                             onClick={() => setFilter(f)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${filter === f
-                                    ? 'bg-primary/20 text-primary-light border border-primary/30'
-                                    : 'bg-white/[0.04] text-slate-400 border border-transparent hover:bg-white/[0.08]'
+                                ? 'bg-primary/20 text-primary-light border border-primary/30'
+                                : 'bg-white/[0.04] text-slate-400 border border-transparent hover:bg-white/[0.08]'
                                 }`}
                         >
                             {f}

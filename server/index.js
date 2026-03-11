@@ -1,11 +1,13 @@
 // ============================
-// GigGuard AI — Express Backend Server
+// FlexCover — Express Backend Server
 // ============================
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { randomUUID } from 'crypto';
 import { store, CITIES, PLATFORMS } from './data/mockData.js';
-import { calculateRisk } from './ai/riskEngine.js';
+import { calculateRisk, assessRisk } from './ai/riskEngine.js';
+import { generatePolicy, renewPolicy, DISRUPTION_TRIGGERS, POLICY_TERMS } from './ai/policyGenerator.js';
 import { generateDisruptionData, processTriggeredClaims, getThresholds } from './ai/triggerEngine.js';
 import { checkFraud } from './ai/fraudDetector.js';
 import { generateForecasts, getHighRiskForecasts } from './ai/predictiveAlerts.js';
@@ -31,7 +33,7 @@ app.get('/api/workers/:id', (req, res) => {
     res.json({ worker, policy, claims });
 });
 
-app.post('/api/workers', (req, res) => {
+app.post('/api/workers', async (req, res) => {
     const { name, phone, email, platform, city, zoneId, avgDailyHours, avgDailyEarnings } = req.body;
 
     // Find zone
@@ -57,28 +59,26 @@ app.post('/api/workers', (req, res) => {
 
     store.workers.push(worker);
 
-    // Auto-generate policy via AI risk engine
-    const risk = calculateRisk({
-        zone, avgDailyHours: worker.avgDailyHours,
+    // AI-powered risk assessment (falls back to deterministic)
+    const risk = await assessRisk({
+        zone,
+        avgDailyHours: worker.avgDailyHours,
         avgDailyEarnings: worker.avgDailyEarnings,
-        platform: worker.platform
+        platform: worker.platform,
+        city: worker.city,
     });
 
-    const policy = {
-        id: randomUUID(),
+    // Generate comprehensive weekly policy
+    const policy = generatePolicy({
         workerId: worker.id,
         workerName: worker.name,
         city: worker.city,
-        zone: zone.name,
-        zoneId: zone.id,
-        riskScore: risk.riskScore,
-        weeklyPremium: risk.weeklyPremium,
-        coverageLimit: risk.coverageLimit,
-        riskCategory: risk.riskCategory,
-        status: 'active',
-        startDate: worker.joinedAt,
-        lastPremiumPaid: worker.joinedAt,
-    };
+        zone,
+        risk,
+        avgDailyEarnings: worker.avgDailyEarnings,
+        avgDailyHours: worker.avgDailyHours,
+        platform: worker.platform,
+    });
 
     store.policies.push(policy);
 
@@ -96,7 +96,40 @@ app.get('/api/policies/:workerId', (req, res) => {
     res.json(policy);
 });
 
-app.post('/api/policies/calculate', (req, res) => {
+// Full policy document with all terms and triggers
+app.get('/api/policies/:workerId/details', (req, res) => {
+    const policy = store.policies.find(p => p.workerId === req.params.workerId);
+    if (!policy) return res.status(404).json({ error: 'Policy not found' });
+
+    // For legacy policies that don't have full details, add them
+    if (!policy.disruptions) {
+        policy.disruptions = DISRUPTION_TRIGGERS.map(t => ({ ...t, applicable: true, relevance: 'standard' }));
+    }
+    if (!policy.terms) {
+        policy.terms = POLICY_TERMS;
+    }
+    if (!policy.coverageDuration) {
+        policy.coverageDuration = '7 days';
+        policy.autoRenewal = true;
+        const start = new Date(policy.startDate || policy.createdAt);
+        policy.endDate = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    }
+
+    res.json(policy);
+});
+
+// Renew a policy for the next week
+app.post('/api/policies/:workerId/renew', (req, res) => {
+    const idx = store.policies.findIndex(p => p.workerId === req.params.workerId);
+    if (idx === -1) return res.status(404).json({ error: 'Policy not found' });
+
+    const renewed = renewPolicy(store.policies[idx]);
+    store.policies[idx] = renewed;
+
+    res.json({ policy: renewed, message: 'Policy renewed for 7 days' });
+});
+
+app.post('/api/policies/calculate', async (req, res) => {
     const { city, zoneId, avgDailyHours, avgDailyEarnings, platform } = req.body;
     const cityData = Object.values(CITIES).find(c => c.name.toLowerCase() === city.toLowerCase());
     if (!cityData) return res.status(400).json({ error: 'City not found' });
@@ -104,8 +137,52 @@ app.post('/api/policies/calculate', (req, res) => {
     const zone = zoneId ? cityData.zones.find(z => z.id === zoneId) : cityData.zones[0];
     if (!zone) return res.status(400).json({ error: 'Zone not found' });
 
-    const result = calculateRisk({ zone, avgDailyHours, avgDailyEarnings, platform });
+    const result = await assessRisk({
+        zone,
+        avgDailyHours: Number(avgDailyHours) || 8,
+        avgDailyEarnings: Number(avgDailyEarnings) || 600,
+        platform: platform || 'Unknown',
+        city: cityData.name,
+    });
     res.json(result);
+});
+
+// ============ AI RISK ASSESSMENT (standalone) ============
+app.post('/api/risk/assess', async (req, res) => {
+    const { city, zoneId, avgDailyHours, avgDailyEarnings, platform } = req.body;
+
+    if (!city) return res.status(400).json({ error: 'city is required' });
+
+    const cityData = Object.values(CITIES).find(c => c.name.toLowerCase() === city.toLowerCase());
+    if (!cityData) return res.status(400).json({ error: 'City not found' });
+
+    const zone = zoneId ? cityData.zones.find(z => z.id === zoneId) : cityData.zones[0];
+    if (!zone) return res.status(400).json({ error: 'Zone not found' });
+
+    const result = await assessRisk({
+        zone,
+        avgDailyHours: Number(avgDailyHours) || 8,
+        avgDailyEarnings: Number(avgDailyEarnings) || 600,
+        platform: platform || 'Unknown',
+        city: cityData.name,
+    });
+
+    res.json({
+        assessment: result,
+        zone: {
+            name: zone.name,
+            riskLevel: zone.riskLevel,
+            floodProne: zone.floodProne,
+            avgRainfall: zone.avgRainfall,
+            avgAQI: zone.avgAQI,
+        },
+        worker: {
+            city: cityData.name,
+            platform: platform || 'Unknown',
+            avgDailyHours: Number(avgDailyHours) || 8,
+            avgDailyEarnings: Number(avgDailyEarnings) || 600,
+        },
+    });
 });
 
 // ============ CLAIMS ============
@@ -296,7 +373,7 @@ app.get('/api/platforms', (req, res) => {
 // Server start
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-    console.log(`\n🛡️  GigGuard AI Backend running on http://localhost:${PORT}`);
+    console.log(`\n🛡️  FlexCover Backend running on http://localhost:${PORT}`);
     console.log(`   Workers: ${store.workers.length}`);
     console.log(`   Policies: ${store.policies.length}`);
     console.log(`   Claims: ${store.claims.length}\n`);

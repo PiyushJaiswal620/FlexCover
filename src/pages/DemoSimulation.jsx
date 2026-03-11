@@ -45,10 +45,10 @@ export default function DemoSimulation() {
         <div className="space-y-6 max-w-5xl">
             <div>
                 <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                    <Zap className="text-primary-light" /> Demo Simulation Console
+                    <Zap className="text-primary-light" /> Event Simulator
                 </h1>
                 <p className="text-sm text-slate-400 mt-1">
-                    Trigger real-time parametric disruption events to test automatic claim generation and fraud detection.
+                    Trigger disruption events to test automatic claim generation.
                 </p>
             </div>
 
@@ -95,7 +95,7 @@ export default function DemoSimulation() {
                     {loading ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-slate-400 space-y-4 py-10">
                             <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                            <div className="text-sm animate-pulse">Running AI risk models...</div>
+                            <div className="text-sm animate-pulse">Processing event...</div>
                         </div>
                     ) : result ? (
                         <div className="flex-1 space-y-6 animate-fade-in">
@@ -138,12 +138,12 @@ export default function DemoSimulation() {
                                     {result.fraudChecks.some(f => f.verdict !== 'clean') && (
                                         <div className="flex gap-3 text-warning font-bold">
                                             <span className="text-blue-400 font-normal">[{new Date().toLocaleTimeString()}]</span>
-                                            <span>AI Fraud Detector flagged {result.fraudChecks.filter(f => f.verdict !== 'clean').length} claims for review!</span>
+                                            <span>System flagged {result.fraudChecks.filter(f => f.verdict !== 'clean').length} claims for review.</span>
                                         </div>
                                     )}
                                     <div className="flex gap-3 text-success font-bold">
                                         <span className="text-blue-400 font-normal">[{new Date().toLocaleTimeString()}]</span>
-                                        <span>{result.payments.length} Razorpay UPI payouts initiated automatically!</span>
+                                        <span>{result.payments.length} payouts initiated successfully.</span>
                                     </div>
                                 </div>
                             </div>
