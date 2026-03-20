@@ -230,7 +230,7 @@ app.post('/api/disruptions/simulate', (req, res) => {
     const fraudResults = newClaims.map(c => {
         const worker = store.workers.find(w => w.id === c.workerId);
         const result = checkFraud(c, store.claims, worker);
-        
+
         // Attach details so frontend can show them
         c.status = result.verdict;
         c.anomalyScore = result.anomalyScore;
@@ -377,9 +377,14 @@ app.get('/api/platforms', (req, res) => {
 
 // Server start
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`\n🛡️  FlexCover Backend running on http://localhost:${PORT}`);
-    console.log(`   Workers: ${store.workers.length}`);
-    console.log(`   Policies: ${store.policies.length}`);
-    console.log(`   Claims: ${store.claims.length}\n`);
-});
+
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    app.listen(PORT, () => {
+        console.log(`\n🛡️  FlexCover Backend running on http://localhost:${PORT}`);
+        console.log(`   Workers: ${store.workers.length}`);
+        console.log(`   Policies: ${store.policies.length}`);
+        console.log(`   Claims: ${store.claims.length}\n`);
+    });
+}
+
+export default app;
