@@ -1,160 +1,351 @@
 import { useState, useEffect } from 'react';
 import {
-    Users, Shield, IndianRupee, AlertTriangle, TrendingUp,
-    MapPin, Activity, CheckCircle2, AlertOctagon
+  Users, Shield, IndianRupee, AlertTriangle, TrendingUp, MapPin,
+  Activity, CheckCircle2, AlertOctagon, Search, Filter, Eye,
+  BarChart3, Clock, Zap, ShieldAlert, X
 } from 'lucide-react';
 import {
-    AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-    BarChart, Bar, PieChart, Pie, Cell, Legend
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, PieChart, Pie, Cell, Legend
 } from 'recharts';
+import * as api from '../api/client';
+import { getStore, CITIES, PLANS, CLAIM_TYPES, checkFraud, updateClaimStatus } from '../data/store';
 
-const COLORS = ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#ef4444'];
+const COLORS = ['#0ea5e9', '#14b8a6', '#6366f1', '#f59e0b', '#ef4444', '#22c55e'];
 
 export default function AdminDashboard() {
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
+  const store = getStore();
+  const [search, setSearch] = useState('');
+  const [filterCity, setFilterCity] = useState('all');
+  const [filterPlatform, setFilterPlatform] = useState('all');
+  const [claimReview, setClaimReview] = useState(null);
+  const [tab, setTab] = useState('overview');
 
-    useEffect(() => {
-        fetch('/api/analytics/summary')
-            .then(r => r.json())
-            .then(d => { setData(d); setLoading(false); })
-            .catch(() => setLoading(false));
-    }, []);
+  // Live analytics state — pre-populated from local store, then refreshed from API
+  const now = Date.now();
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const weekClaims = store.claims.filter(c => now - new Date(c.createdAt).getTime() < weekMs);
 
-    if (loading || !data) {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <div className="w-10 h-10 border-3 border-primary/30 border-t-primary rounded-full animate-spin" />
-            </div>
-        );
-    }
+  const [analytics, setAnalytics] = useState({
+    totalRiders: store.workers?.length || store.riders?.length || 0,
+    activePolicies: store.policies.filter(p => p.status === 'active').length,
+    totalClaims: store.claims.length,
+    claimsThisWeek: weekClaims.length,
+    autoApproved: store.claims.filter(c => c.status === 'auto_approved').length,
+    totalPayout: store.claims.filter(c => ['paid', 'approved', 'auto_approved'].includes(c.status)).reduce((s, c) => s + c.payoutAmount, 0),
+    fraudAlerts: store.fraudAlerts.length,
+    weeklyPayouts: Array.from({ length: 8 }, (_, i) => ({ week: `W${i + 1}`, payout: Math.floor(Math.random() * 5000 + 1000), claims: Math.floor(Math.random() * 8 + 1) })),
+    claimsByType: CLAIM_TYPES.map(ct => ({ name: ct.label.split(' ').slice(0, 2).join(' '), value: store.claims.filter(c => c.triggerType === ct.id).length })).filter(c => c.value > 0),
+    platformData: (() => { const d = {}; (store.workers || store.riders || []).forEach(r => { d[r.platform] = (d[r.platform] || 0) + 1; }); return Object.entries(d).map(([name, value]) => ({ name, value })); })(),
+  });
 
-    const platformData = data.platforms.map((p, i) => ({
-        name: p, value: Math.floor(data.totalWorkers / data.platforms.length) + (i % 3)
-    }));
+  const [riders, setRiders] = useState(store.workers || store.riders || []);
+  const [fraudAlerts, setFraudAlerts] = useState(store.fraudAlerts || []);
 
-    return (
-        <div className="space-y-6 max-w-7xl">
-            <div>
-                <h1 className="text-2xl font-bold text-white">Admin Dashboard</h1>
-                <p className="text-sm text-slate-400 mt-1">Platform-wide risk and claims analytics</p>
-            </div>
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [analyticsData, ridersData, fraudData] = await Promise.all([
+          api.getAnalyticsSummary(),
+          api.getRiders(),
+          api.getFraudAlerts(),
+        ]);
+        if (analyticsData) {
+          setAnalytics(prev => ({
+            ...prev,
+            ...analyticsData,
+            claimsByType: Object.entries(analyticsData.claimsByType || {}).map(([type, value]) => ({
+              name: type.replace(/_/g, ' '),
+              value,
+            })).filter(c => c.value > 0),
+            platformData: Object.entries(analyticsData.platformData || {}).map(([name, value]) => ({ name, value })),
+          }));
+        }
+        if (ridersData?.riders) setRiders(ridersData.riders);
+        if (ridersData?.workers) setRiders(ridersData.workers);
+        if (fraudData?.alerts) setFraudAlerts(fraudData.alerts);
+      } catch (_) {
+        // fallback to local store — already set in initial state
+      }
+    };
+    loadData();
+  }, []);
 
-            {/* Top Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                {[
-                    { label: 'Active Policies', value: data.activePolicies, icon: Shield, color: 'text-primary-light', bg: 'bg-primary/10' },
-                    { label: 'Total Workers', value: data.totalWorkers, icon: Users, color: 'text-secondary', bg: 'bg-secondary/10' },
-                    { label: 'Weekly Claims', value: data.claimsThisWeek, icon: Activity, color: 'text-success', bg: 'bg-success/10' },
-                    { label: 'Weekly Payout', value: `₹${(data.payoutThisWeek / 1000).toFixed(1)}k`, icon: IndianRupee, color: 'text-warning', bg: 'bg-warning/10' },
-                    { label: 'Fraud Alerts', value: data.fraudAlerts, icon: AlertOctagon, color: 'text-danger', bg: 'bg-danger/10' },
-                ].map((stat, i) => (
-                    <div key={i} className="glass p-4 rounded-xl flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl ${stat.bg} flex items-center justify-center`}>
-                            <stat.icon size={24} className={stat.color} />
-                        </div>
-                        <div>
-                            <div className="text-2xl font-bold text-white leading-none mb-1">{stat.value}</div>
-                            <div className="text-xs font-medium text-slate-400">{stat.label}</div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+  const avgPremium = store.policies.length > 0
+    ? Math.round(store.policies.reduce((s, p) => s + p.weeklyPremium, 0) / store.policies.length)
+    : analytics.avgWeeklyPremium || 0;
 
-            <div className="grid lg:grid-cols-3 gap-4">
-                {/* Main Chart */}
-                <div className="lg:col-span-2 glass p-5 rounded-xl">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-sm font-semibold text-white">Claims & Payouts Trend (Last 8 Weeks)</h3>
-                    </div>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <AreaChart data={data.weeklyPayouts} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                            <defs>
-                                <linearGradient id="payoutGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#ec4899" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#ec4899" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <XAxis dataKey="week" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
-                            <YAxis
-                                tick={{ fill: '#94a3b8', fontSize: 12 }}
-                                axisLine={false} tickLine={false}
-                                tickFormatter={v => `₹${v / 1000}k`}
-                            />
-                            <Tooltip
-                                contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12 }}
-                                itemStyle={{ color: '#f1f5f9' }}
-                                formatter={(v, name) => [name === 'payout' ? `₹${v}` : v, name === 'payout' ? 'Total Payout' : 'Claims Count']}
-                            />
-                            <Area type="monotone" dataKey="payout" stroke="#ec4899" strokeWidth={3} fillOpacity={1} fill="url(#payoutGradient)" />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                </div>
+  // Filtered riders
+  let filteredRiders = riders;
+  if (search) filteredRiders = filteredRiders.filter(r => r.name?.toLowerCase().includes(search.toLowerCase()) || r.platform?.toLowerCase().includes(search.toLowerCase()));
+  if (filterCity !== 'all') filteredRiders = filteredRiders.filter(r => r.city === filterCity);
+  if (filterPlatform !== 'all') filteredRiders = filteredRiders.filter(r => r.platform === filterPlatform);
 
-                {/* Platform Breakdown */}
-                <div className="glass p-5 rounded-xl flex flex-col">
-                    <h3 className="text-sm font-semibold text-white mb-2">Coverage by Platform</h3>
-                    <div className="flex-1 min-h-[250px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={platformData}
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                    stroke="none"
-                                >
-                                    {platformData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12 }}
-                                    itemStyle={{ color: '#f1f5f9' }}
-                                />
-                                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 12, color: '#94a3b8' }} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
+  const claimsByType = analytics.claimsByType || [];
+  const platformChartData = analytics.platformData || [];
+  const weeklyPayouts = analytics.weeklyPayouts || [];
 
-            {/* City Risk Heatmap */}
-            <div className="glass p-5 rounded-xl">
-                <h3 className="text-sm font-semibold text-white mb-6">Zone Risk Heatmap</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                    {Object.entries(data.riskByCity).map(([cityName, cityData]) => (
-                        <div key={cityName} className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                            <div className="flex items-center justify-between mb-4">
-                                <h4 className="font-semibold text-white flex items-center gap-2">
-                                    <MapPin size={16} className="text-primary-light" /> {cityName}
-                                </h4>
-                                <div className={`text-xs font-bold px-2 py-0.5 rounded-full ${cityData.avgRiskScore >= 60 ? 'bg-danger/20 text-danger' : cityData.avgRiskScore >= 35 ? 'bg-warning/20 text-warning' : 'bg-success/20 text-success'}`}>
-                                    {cityData.avgRiskScore}/100
-                                </div>
-                            </div>
+  // Risk zones
+  const riskZones = Object.entries(CITIES).map(([key, city]) => {
+    const cityRiders = store.riders.filter(r => r.city === city.name);
+    const cityPolicies = store.policies.filter(p => p.city === city.name);
+    const avgRisk = cityPolicies.length > 0 ? Math.round(cityPolicies.reduce((s, p) => s + p.riskScore, 0) / cityPolicies.length) : 0;
+    return { name: city.name, riders: cityRiders.length, policies: cityPolicies.length, avgRisk, zones: city.zones };
+  });
 
-                            <div className="space-y-2">
-                                {cityData.zones.map((zone, i) => (
-                                    <div key={i} className="flex justify-between items-center text-sm">
-                                        <span className="text-slate-400">{zone.name}</span>
-                                        <div className="flex items-center gap-2">
-                                            {zone.floodProne && <span title="Flood Prone">🌊</span>}
-                                            <span className={`w-2.5 h-2.5 rounded-full ${zone.riskLevel === 'high' ? 'bg-danger' : zone.riskLevel === 'medium' ? 'bg-warning' : 'bg-success'}`} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+  // Fraud queue uses API-fetched fraud alerts + local store claims flagged for review
+  const fraudQueue = fraudAlerts.length > 0
+    ? fraudAlerts
+    : store.claims.filter(c => c.status === 'under_review' || c.status === 'flagged' || c.fraudFlags?.length > 0);
 
-                            <div className="mt-4 pt-4 border-t border-white/[0.04] flex justify-between text-xs text-slate-500">
-                                <span>{cityData.workers} Workers</span>
-                                <span>{cityData.policies} Policies</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
+  const handleApprove = async (claimId) => {
+    try { await api.updateClaimStatus(claimId, 'approved'); } catch (_) { updateClaimStatus(claimId, 'approved'); }
+    setFraudAlerts(prev => prev.filter(a => a.claimId !== claimId));
+    setClaimReview(null);
+  };
+  const handleReject = async (claimId) => {
+    try { await api.updateClaimStatus(claimId, 'rejected'); } catch (_) { updateClaimStatus(claimId, 'rejected'); }
+    setFraudAlerts(prev => prev.filter(a => a.claimId !== claimId));
+    setClaimReview(null);
+  };
+
+  return (
+    <div className="space-y-5 max-w-7xl page-enter">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <BarChart3 size={20} className="text-primary-light" /> Admin Dashboard
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">Platform-wide analytics and management</p>
         </div>
-    );
+        <div className="flex gap-2">
+          {['overview', 'riders', 'fraud'].map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold capitalize transition-all ${
+                tab === t ? 'gradient-primary text-white' : 'bg-white/[0.04] text-slate-400 hover:bg-white/[0.06]'
+              }`}>{t}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Top Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        {[
+          { label: 'Riders', value: analytics.totalRiders || riders.length, icon: Users, color: 'text-primary-light', bg: 'bg-primary/10' },
+          { label: 'Active Policies', value: analytics.activePolicies, icon: Shield, color: 'text-success', bg: 'bg-success/10' },
+          { label: 'Claims This Week', value: analytics.claimsThisWeek, icon: Activity, color: 'text-warning', bg: 'bg-warning/10' },
+          { label: 'Auto-Approved', value: analytics.autoApproved, icon: Zap, color: 'text-primary-light', bg: 'bg-primary/10' },
+          { label: 'Total Payouts', value: `₹${((analytics.totalPayout || 0) / 1000).toFixed(1)}k`, icon: IndianRupee, color: 'text-success', bg: 'bg-success/10' },
+          { label: 'Fraud Alerts', value: analytics.fraudAlerts || fraudQueue.length, icon: AlertOctagon, color: 'text-danger', bg: 'bg-danger/10' },
+        ].map((s, i) => (
+          <div key={i} className="glass-card p-3 flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
+              <s.icon size={18} className={s.color} />
+            </div>
+            <div>
+              <div className="text-lg font-bold text-white leading-none">{s.value}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {tab === 'overview' && (
+        <>
+          {/* Charts Row */}
+          <div className="grid lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 glass-card">
+              <h3 className="text-sm font-semibold text-white mb-4">Weekly Payouts & Claims Trend</h3>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={weeklyPayouts}>
+                  <XAxis dataKey="week" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="left" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₹${v / 1000}k`} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: '#0f1d32', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 12 }} />
+                  <Bar yAxisId="left" dataKey="payout" fill="#0ea5e9" radius={[6, 6, 0, 0]} name="Payout (₹)" />
+                  <Bar yAxisId="right" dataKey="claims" fill="rgba(14,165,233,0.2)" radius={[6, 6, 0, 0]} name="Claims #" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="glass-card flex flex-col">
+              <h3 className="text-sm font-semibold text-white mb-2">Claims by Disruption</h3>
+              <div className="flex-1 min-h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={claimsByType} innerRadius={50} outerRadius={70} paddingAngle={4} dataKey="value" stroke="none">
+                      {claimsByType.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: '#0f1d32', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11 }} />
+                    <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: 10, color: '#64748b' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Risk Zone Map */}
+          <div className="glass-card">
+            <h3 className="text-sm font-semibold text-white mb-4">Risk Zone Summary</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              {riskZones.map(rz => (
+                <div key={rz.name} className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-white text-sm flex items-center gap-1.5">
+                      <MapPin size={13} className="text-primary-light" /> {rz.name}
+                    </h4>
+                    <span className={`badge ${rz.avgRisk >= 60 ? 'badge-danger' : rz.avgRisk >= 35 ? 'badge-warning' : 'badge-success'} text-[9px]`}>
+                      {rz.avgRisk}/100
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {rz.zones.map(z => (
+                      <div key={z.id} className="flex justify-between items-center text-xs">
+                        <span className="text-slate-400">{z.name}</span>
+                        <div className="flex items-center gap-1.5">
+                          {z.floodProne && <span title="Flood Prone">🌊</span>}
+                          <div className={`w-2 h-2 rounded-full ${z.riskLevel === 'high' ? 'bg-danger' : z.riskLevel === 'medium' ? 'bg-warning' : 'bg-success'}`} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-white/[0.04] flex justify-between text-[10px] text-slate-500">
+                    <span>{rz.riders} Riders</span>
+                    <span>{rz.policies} Policies</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Additional analytics */}
+          <div className="grid sm:grid-cols-3 gap-3">
+            <div className="glass-card p-4">
+              <div className="text-[10px] text-slate-500 mb-1">Avg Weekly Premium</div>
+              <div className="text-2xl font-bold text-gradient">₹{avgPremium}</div>
+            </div>
+            <div className="glass-card p-4">
+              <div className="text-[10px] text-slate-500 mb-1">Protected Worker Income</div>
+              <div className="text-2xl font-bold text-success">₹{Math.round(store.riders.reduce((s, r) => s + (r.avgWeeklyEarnings || 4200) * 0.8, 0) / 1000)}k/wk</div>
+            </div>
+            <div className="glass-card p-4">
+              <div className="text-[10px] text-slate-500 mb-1">Platform Distribution</div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {platformChartData.map((p, i) => (
+                  <span key={i} className="badge badge-info text-[9px]">{p.name}: {p.value}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === 'riders' && (
+        <div>
+          <div className="flex gap-3 mb-4">
+            <div className="flex-1 relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search riders..." className="input-field pl-9 text-sm py-2" />
+            </div>
+            <select value={filterCity} onChange={e => setFilterCity(e.target.value)} className="input-field text-sm py-2 w-auto">
+              <option value="all">All Cities</option>
+              {Object.values(CITIES).map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+            </select>
+          </div>
+
+          <div className="glass-card p-0 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/[0.06] bg-black/20">
+                    {['Name', 'Platform', 'City / Zone', 'Risk', 'Premium', 'Plan', 'Claims', 'Status'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-[11px] text-slate-400 font-semibold uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.03]">
+                  {filteredRiders.map(rider => {
+                    const policy = store.policies.find(p => p.riderId === rider.id);
+                    const claims = store.claims.filter(c => c.riderId === rider.id);
+                    return (
+                      <tr key={rider.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="text-sm font-medium text-white">{rider.name}</div>
+                          <div className="text-[10px] text-slate-500">{rider.phone}</div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{rider.platform}</td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm text-slate-300">{rider.city}</div>
+                          <div className="text-[10px] text-slate-500">{rider.zone?.name}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`badge ${(policy?.riskScore || 0) >= 60 ? 'badge-danger' : (policy?.riskScore || 0) >= 35 ? 'badge-warning' : 'badge-success'} text-[9px]`}>
+                            {policy?.riskScore || 0}/100
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-white">₹{policy?.weeklyPremium || 0}</td>
+                        <td className="px-4 py-3 text-xs text-slate-400">{policy?.planName || '—'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-300">{claims.length}</td>
+                        <td className="px-4 py-3">
+                          <span className={`badge ${policy?.status === 'active' ? 'badge-success' : 'badge-warning'} text-[9px]`}>
+                            {policy?.status || 'none'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'fraud' && (
+        <div>
+          <h2 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+            <ShieldAlert size={14} className="text-danger" /> Fraud Review Queue ({fraudQueue.length})
+          </h2>
+          {fraudQueue.length === 0 ? (
+            <div className="glass-card text-center py-12 text-slate-500 text-sm">No claims pending fraud review ✅</div>
+          ) : (
+            <div className="space-y-2">
+              {fraudQueue.map(claim => (
+                <div key={claim.id} className="glass-card p-4 border border-danger/10">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-white">{claim.triggerLabel}</div>
+                      <div className="text-xs text-slate-400">{claim.riderName} • {claim.city}, {claim.zone}</div>
+                      {claim.fraudFlags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {claim.fraudFlags.map((f, i) => (
+                            <span key={i} className="text-[10px] text-danger/80 bg-danger/8 px-2 py-0.5 rounded-full border border-danger/15">{f}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button onClick={() => handleApprove(claim.id)} className="px-3 py-1.5 rounded-lg bg-success/10 text-success text-xs font-semibold border border-success/20 hover:bg-success/20 transition-all">
+                        <CheckCircle2 size={12} className="inline mr-1" /> Approve
+                      </button>
+                      <button onClick={() => handleReject(claim.id)} className="px-3 py-1.5 rounded-lg bg-danger/10 text-danger text-xs font-semibold border border-danger/20 hover:bg-danger/20 transition-all">
+                        <X size={12} className="inline mr-1" /> Reject
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex gap-4 text-[10px] text-slate-500">
+                    <span>Payout: ₹{claim.payoutAmount}</span>
+                    <span>Hours: {claim.lostHours}h</span>
+                    <span>Fraud Score: {claim.fraudScore || 'N/A'}</span>
+                    <span>{new Date(claim.createdAt).toLocaleDateString('en-IN')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
