@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText, CheckCircle2, Clock, AlertTriangle, Search,
   IndianRupee, Zap, Eye, X, Download, ShieldAlert, Filter
@@ -15,21 +15,54 @@ export default function ClaimsCenter() {
   const [viewAll, setViewAll] = useState(false);
   const [selectedClaim, setSelectedClaim] = useState(null);
   const [showManual, setShowManual] = useState(false);
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
 
-  const allClaims = viewAll ? store.claims : getRiderClaims(rider?.id);
+  const [dbClaims, setDbClaims] = useState([]);
+  const [isBackend, setIsBackend] = useState(false);
+
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const available = await import('../api/client').then(m => m.isBackendAvailable());
+        if (available) {
+          setIsBackend(true);
+          const api = await import('../api/client').then(m => m.default);
+          const cData = await api.getClaims(viewAll ? {} : { riderId: rider?.id });
+          setDbClaims(cData.claims || []);
+        }
+      } catch (e) {
+        console.error("Backend sync failed", e);
+      }
+    };
+    checkBackend();
+    const interval = setInterval(checkBackend, 5000);
+    return () => clearInterval(interval);
+  }, [rider?.id, viewAll, tick]);
+
+  const allClaims = isBackend ? dbClaims : (viewAll ? store.claims : getRiderClaims(rider?.id));
   const filteredClaims = filter === 'all' ? allClaims : allClaims.filter(c => c.status === filter);
 
   // Suggested claims for this rider
-  const suggestedClaims = store.claims.filter(c => c.riderId === rider?.id && c.status === 'suggested');
+  const suggestedClaims = allClaims.filter(c => c.status === 'suggested');
 
-  const confirmClaim = (claimId) => {
-    updateClaimStatus(claimId, 'auto_approved');
-    store.eventLog.unshift({
-      id: `evt-${Date.now()}`, type: 'claim',
-      message: `Claim ${claimId} auto-approved via one-tap confirmation`,
-      timestamp: new Date().toISOString(), severity: 'info'
-    });
+  const confirmClaim = async (claimId) => {
+    if (isBackend) {
+      try {
+        const api = await import('../api/client').then(m => m.default);
+        await api.updateClaimStatus(claimId, 'auto_approved');
+        const cData = await api.getClaims(viewAll ? {} : { riderId: rider?.id });
+        setDbClaims(cData.claims || []);
+      } catch (e) {
+        console.error("Failed to confirm claim on backend", e);
+      }
+    } else {
+      updateClaimStatus(claimId, 'auto_approved');
+      store.eventLog.unshift({
+        id: `evt-${Date.now()}`, type: 'claim',
+        message: `Claim ${claimId} auto-approved via one-tap confirmation`,
+        timestamp: new Date().toISOString(), severity: 'info'
+      });
+    }
     setTick(t => t + 1);
   };
 

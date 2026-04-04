@@ -161,7 +161,7 @@ export default function AlertsPage() {
                             <div className="text-sm font-bold text-white">{t.description}</div>
                             <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
                               <span className="flex items-center gap-1"><MapPin size={11} /> {t.city}, {t.zone}</span>
-                              <span className="flex items-center gap-1"><Clock size={11} /> {new Date(t.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                              <span className="flex items-center gap-1"><Clock size={11} /> {new Date(t.triggeredAt || t.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                             <div className="flex items-center gap-3 text-xs mt-1.5">
                               <span className="text-slate-400">Value: <strong className="text-white">{t.value}</strong></span>
@@ -194,7 +194,7 @@ export default function AlertsPage() {
                       <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5">
                         <span>{t.city}, {t.zone}</span>
                         <span>•</span>
-                        <span>{new Date(t.timestamp).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>{new Date(t.triggeredAt || t.timestamp).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                         <span className={`badge ${t.resolved ? 'badge-success' : 'badge-warning'} text-[8px]`}>
                           {t.resolved ? 'Resolved' : 'Active'}
                         </span>

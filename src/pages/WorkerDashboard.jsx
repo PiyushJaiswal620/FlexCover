@@ -14,17 +14,62 @@ import {
 export default function WorkerDashboard() {
   const nav = useNavigate();
   const store = getStore();
-  const [, setTick] = useState(0);
   const rider = getCurrentRider();
   const policy = getCurrentPolicy();
-  const claims = getRiderClaims(rider?.id);
+  
+  const [dbClaims, setDbClaims] = useState([]);
+  const [dbTriggers, setDbTriggers] = useState([]);
+  const [isBackend, setIsBackend] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const available = await import('../api/client').then(m => m.isBackendAvailable());
+        if (available) {
+          setIsBackend(true);
+          const api = await import('../api/client').then(m => m.default);
+          const cData = await api.getClaims({ riderId: rider?.id });
+          const tData = await api.getTriggers({ city: rider?.city });
+          setDbClaims(cData.claims || []);
+          setDbTriggers(tData.triggers || []);
+        }
+      } catch (e) {
+        console.error("Backend sync failed", e);
+      }
+    };
+    checkBackend();
+    const interval = setInterval(checkBackend, 5000); // Poll every 5s for the demo
+    return () => clearInterval(interval);
+  }, [rider?.id, rider?.city, tick]);
+
+  const claims = isBackend ? dbClaims : getRiderClaims(rider?.id);
+  const activeTriggers = isBackend 
+    ? dbTriggers.filter(t => !t.resolved)
+    : store.triggers.filter(t => t.city === rider?.city && !t.resolved);
+  
+  const suggestedClaims = claims.filter(c => c.status === 'suggested');
   const riskScore = rider ? calculateRiskScore(rider) : 0;
 
-  // Active triggers for this rider's city
-  const activeTriggers = store.triggers.filter(t => t.city === rider?.city && !t.resolved);
-  
-  // Suggested claims for this rider
-  const suggestedClaims = store.claims.filter(c => c.riderId === rider?.id && c.status === 'suggested');
+  const confirmClaim = async (claimId) => {
+    if (isBackend) {
+      try {
+        const api = await import('../api/client').then(m => m.default);
+        await api.updateClaimStatus(claimId, 'auto_approved');
+        const cData = await api.getClaims({ riderId: rider?.id });
+        setDbClaims(cData.claims || []);
+      } catch (e) {
+        console.error("Failed to confirm claim on backend", e);
+      }
+    } else {
+      const claim = store.claims.find(c => c.id === claimId);
+      if (claim) {
+        claim.status = 'auto_approved';
+        claim.processedAt = new Date().toISOString();
+      }
+    }
+    setTick(t => t + 1);
+  };
 
   const earningsData = [
     { day: 'Mon', earned: 580, protected: 680 },
@@ -106,11 +151,8 @@ export default function WorkerDashboard() {
               </div>
             </div>
           </div>
-          <button onClick={() => {
-            suggestedClaims[0].status = 'auto_approved';
-            suggestedClaims[0].processedAt = new Date().toISOString();
-            setTick(t => t + 1);
-          }} className="w-full btn-primary py-3 text-sm font-bold">
+          <button onClick={() => confirmClaim(suggestedClaims[0].id)} 
+            className="w-full btn-primary py-3 text-sm font-bold">
             <CheckCircle2 size={16} /> Confirm & Receive Payout — 1 Tap ✓
           </button>
         </div>

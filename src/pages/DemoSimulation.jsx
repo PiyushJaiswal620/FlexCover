@@ -20,7 +20,7 @@ export default function DemoSimulation() {
     const triggerEvent = async (type) => {
         setLoading(true);
         try {
-            const res = await fetch('/api/disruptions/simulate', {
+            const res = await fetch('/api/triggers/simulate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type, city: selectedCity })

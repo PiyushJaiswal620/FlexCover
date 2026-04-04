@@ -161,7 +161,7 @@ function generateRiders() {
         const cityData = Object.values(CITIES).find(c => c.name === def.city);
         const zone = cityData?.zones.find(z => z.id === def.zoneKey) || cityData?.zones[0] || allZones[0];
         return {
-            id: `rider-seed-${String(i + 1).padStart(3, '0')}`,
+            id: `rider-${String(i + 1).padStart(3, '0')}`,
             name: def.name,
             phone: `+91 ${9000000000 + i * 1111111}`,
             email: `${def.name.toLowerCase().replace(/ /g, '.')}@gmail.com`,
@@ -257,7 +257,7 @@ function generateClaims(riders, policies) {
         const claimType = CLAIM_TYPES.find(ct => ct.id === cd.type);
         const ts = new Date(Date.now() - cd.daysAgo * 24 * 60 * 60 * 1000);
         return {
-            id: `claim-seed-${String(i + 1).padStart(3, '0')}`,
+            id: `claim-${String(i + 1).padStart(3, '0')}`,
             riderId: rider.id,
             workerId: rider.id,
             riderName: rider.name,

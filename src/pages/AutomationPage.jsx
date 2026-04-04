@@ -36,6 +36,8 @@ export default function AutomationPage() {
       }
     };
     fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const typeConfig = {
