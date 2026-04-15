@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
     Zap, CloudRain, Thermometer, Wind, AlertOctagon,
-    Clock, IndianRupee, ShieldAlert, BadgeCheck
+    Clock, IndianRupee, ShieldAlert, BadgeCheck, MapPin
 } from 'lucide-react';
 
 export default function DemoSimulation() {
@@ -38,7 +38,8 @@ export default function DemoSimulation() {
         { id: 'extreme_heat', label: 'Extreme Heat (>45°C)', icon: Thermometer, color: 'text-orange-500', bg: 'bg-orange-500/10' },
         { id: 'high_aqi', label: 'High AQI (>350)', icon: Wind, color: 'text-slate-400', bg: 'bg-slate-400/10' },
         { id: 'curfew', label: 'Local Curfew', icon: ShieldAlert, color: 'text-danger', bg: 'bg-danger/10' },
-        { id: 'platform_outage', label: 'Platform Outage', icon: AlertOctagon, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+        { id: 'gps_spoof', label: 'Fraud: GPS Spoof', icon: MapPin, color: 'text-danger', bg: 'bg-danger/10' },
+        { id: 'evidence_gap', label: 'Fraud: Evidence Gap', icon: AlertOctagon, color: 'text-danger', bg: 'bg-danger/10' },
     ];
 
     return (

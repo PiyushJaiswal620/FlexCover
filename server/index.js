@@ -363,7 +363,18 @@ app.post('/api/claims', (req, res) => {
     };
 
     // Fraud check on submission
-    const fraudResult = checkFraud(claim, store.claims, rider);
+    const claimWithGPS = {
+        ...claim,
+        lat: rider?.zone?.lat + (Math.random() - 0.5) * 0.01, // Simulate real GPS
+        lng: rider?.zone?.lng + (Math.random() - 0.5) * 0.01,
+        zoneLat: rider?.zone?.lat,
+        zoneLng: rider?.zone?.lng,
+    };
+
+    const fraudResult = checkFraud(claimWithGPS, store.claims, rider, store.triggers);
+    claim.lat = claimWithGPS.lat;
+    claim.lng = claimWithGPS.lng;
+    
     if (fraudResult.anomalyScore >= 60) {
         claim.status = 'flagged';
         claim.fraudScore = fraudResult.anomalyScore;
@@ -483,7 +494,14 @@ app.post('/api/triggers/simulate', (req, res) => {
     const fraudResults = [];
     newClaims.forEach(c => {
         const rider = store.workers.find(w => w.id === c.workerId);
-        const fraudResult = checkFraud(c, store.claims, rider);
+        
+        // Add coordinates for fraud engine
+        c.lat = rider?.zone?.lat + (Math.random() - 0.5) * 0.005;
+        c.lng = rider?.zone?.lng + (Math.random() - 0.5) * 0.005;
+        c.zoneLat = rider?.zone?.lat;
+        c.zoneLng = rider?.zone?.lng;
+
+        const fraudResult = checkFraud(c, store.claims, rider, store.triggers);
         c.riderId = c.workerId;
         c.riderName = c.workerName;
 
@@ -675,6 +693,8 @@ app.get('/api/analytics/summary', (req, res) => {
         totalPayout: store.claims
             .filter(c => ['approved', 'auto_approved', 'paid'].includes(c.status))
             .reduce((s, c) => s + c.payoutAmount, 0),
+        totalPremiums: store.policies.reduce((s, p) => s + p.weeklyPremium, 0) * 4, // Simulated monthly
+        lossRatio: store.policies.length ? Math.round((store.claims.filter(c => ['approved', 'auto_approved', 'paid'].includes(c.status)).reduce((s, c) => s + c.payoutAmount, 0) / (store.policies.reduce((s, p) => s + p.weeklyPremium, 0) || 1)) * 100) : 0,
         autoApproved: store.claims.filter(c => c.status === 'auto_approved').length,
         fraudAlerts: store.fraudAlerts.length,
         activeDisruptions: store.triggers.filter(t => !t.resolved).length,

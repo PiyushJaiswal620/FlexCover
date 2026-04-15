@@ -1,14 +1,75 @@
 // ============================
-// GigGuard AI — Fraud Detection Module
+// FlexCover AI — Advanced Fraud Detection Module
 // ============================
 
-// Isolation Forest-inspired anomaly scoring
-export function checkFraud(claim, allClaims, worker) {
+/**
+ * Calculates distance between two coordinates in km
+ */
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+/**
+ * Advanced Fraud Detection Engine
+ * @param {Object} claim - The claim being checked
+ * @param {Array} allClaims - Database of existing claims
+ * @param {Object} worker - Worker profile
+ * @param {Array} activeTriggers - Records of actual disruption events
+ */
+export function checkFraud(claim, allClaims, worker, activeTriggers = []) {
     let anomalyScore = 0;
     const flags = [];
 
-    // --- 1. FRAUD RING DETECTION: Network & Device Clustering ---
-    // Look for other recent claims from DIFFERENT workers sharing the same IP or Device string.
+    // --- 1. GPS SPOOFING DETECTION: Geospatial Validation ---
+    // Validate if the reported GPS coordinates match the disruption zone
+    if (claim.lat && claim.lng && claim.zoneLat && claim.zoneLng) {
+        const distanceKm = getDistance(claim.lat, claim.lng, claim.zoneLat, claim.zoneLng);
+        
+        if (distanceKm > 15) { // If worker is > 15km from the event epicenter
+            anomalyScore += 65;
+            flags.push(`GPS Spoofing Suspected: Reported location is ${distanceKm.toFixed(1)}km away from the disruption zone`);
+        } else if (distanceKm > 8) {
+            anomalyScore += 30;
+            flags.push(`Location Anomaly: Worker was on the periphery of the affected zone (${distanceKm.toFixed(1)}km)`);
+        }
+    }
+
+    // --- 2. HISTORICAL EVIDENCE: Disruption Verification ---
+    // Check if a real system disruption was logged for this city/type at the time of claim
+    const actualDisruption = activeTriggers.find(t => 
+        t.type === claim.triggerType && 
+        t.city === claim.city &&
+        (!t.resolved || Math.abs(new Date(t.timestamp) - new Date(claim.createdAt)) < 24 * 60 * 60 * 1000)
+    );
+
+    if (!actualDisruption) {
+        anomalyScore += 55;
+        flags.push('No Historical Evidence: System records do not show a disruption event matching this claim');
+    }
+
+    // --- 3. CROSS-PLATFORM COLLUSION: Delivery "Double-Dipping" ---
+    // Check if the same worker is claiming income loss for the SAME time from multiple platforms
+    const overlappingClaims = allClaims.filter(c => 
+        c.workerId === claim.workerId &&
+        c.id !== claim.id &&
+        Math.abs(new Date(c.createdAt) - new Date(claim.createdAt)) < 4 * 60 * 60 * 1000 && // within 4 hours
+        c.platform !== claim.platform
+    );
+
+    if (overlappingClaims.length > 0) {
+        anomalyScore += 50;
+        flags.push(`Multi-Platform Collision: Duplicate claim found on ${overlappingClaims[0].platform} for matching hours`);
+    }
+
+    // --- 4. DEVICE & NETWORK CLUSTERING (Fraud Rings) ---
     if (claim.ipAddress && claim.deviceId) {
         const clusterClaims = allClaims.filter(c => 
             c.workerId !== claim.workerId &&
@@ -17,47 +78,29 @@ export function checkFraud(claim, allClaims, worker) {
         );
 
         if (clusterClaims.length >= 2) {
-            anomalyScore += 55;
-            flags.push(`Fraud Ring Suspected: ${clusterClaims.length + 1} claims from identical IP/Device within 1 hour`);
+            anomalyScore += 45;
+            flags.push(`Fraud Ring Suspected: ${clusterClaims.length + 1} workers shared identical IP/Device within 1hr window`);
         }
     }
 
-    // --- 2. TELEMETRY MISMATCH: Platform Activity Consistency ---
-    // If the worker was completely offline or not in "delivery" mode when the event hit
-    if (claim.platformActive === false) {
-        anomalyScore += 45;
-        flags.push('Platform Inactive during event: Worker was not verified working during the disruption window');
-    }
-
-    // --- 3. REPUTATION WEIGHTING: Graduated Trust ---
+    // --- 5. REPUTATION & LOYALTY ---
     if (worker && worker.joinedAt) {
         const accountAgeDays = (new Date() - new Date(worker.joinedAt)) / (1000 * 60 * 60 * 24);
-        
         if (accountAgeDays > 180) {
-            // Veteran trust discount
-            anomalyScore -= 20;
+            anomalyScore -= 15; // Trust discount for veterans
             flags.push('Reputation Discount: Verified active worker for >6 months');
         } else if (accountAgeDays < 2) {
-            // New account spike penalty
-            anomalyScore += 30;
-            flags.push('Adversarial Profile: Account created <48hrs before major disruption event');
+            anomalyScore += 25; // Penalty for brand new "burner" accounts
+            flags.push('New Account Profile: High-risk creation window before event');
         }
     }
 
-    // Basic legacy checks to ensure system stability
-    const sameDayClaims = allClaims.filter(c => c.workerId === claim.workerId && c.id !== claim.id && Math.abs(new Date(c.createdAt) - new Date(claim.createdAt)) < 24*60*60*1000);
-    if (sameDayClaims.length > 0) {
-        anomalyScore += 35;
-        flags.push('Duplicate claim detected for same trigger type within 24hrs');
-    }
-
-    // Normalize to 0-100 (and prevent negative due to discount)
+    // Normalize and Thresholding
     anomalyScore = Math.max(0, Math.min(100, anomalyScore));
 
-    // --- DYNAMIC FRICTION STATES ---
     let verdict = 'clean';
     if (anomalyScore >= 60) verdict = 'flagged';
-    else if (anomalyScore >= 25) verdict = 'pending_proof';
+    else if (anomalyScore >= 25) verdict = 'under_review';
 
     return {
         claimId: claim.id,
@@ -65,7 +108,7 @@ export function checkFraud(claim, allClaims, worker) {
         workerName: claim.workerName,
         anomalyScore,
         verdict,
-        flags: flags.length ? flags : ['No anomalies detected'],
+        flags: flags.length ? flags : ['No anomalies detected. Parametric verification passed.'],
         checkedAt: new Date().toISOString(),
     };
 }

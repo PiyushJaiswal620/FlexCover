@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
   Bell, CloudRain, Thermometer, Wind, AlertTriangle, MapPin,
-  Zap, Droplets, ShieldAlert, Clock, Wifi, RefreshCw
+  Zap, Droplets, ShieldAlert, Clock, Wifi, RefreshCw, BarChart3, TrendingUp, ShieldCheck
 } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import * as api from '../api/client';
 import { getStore, getCurrentRider, CLAIM_TYPES } from '../data/store';
 
@@ -203,6 +204,77 @@ export default function AlertsPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Phase 3: Predictive Intelligence */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 glass-card">
+          <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2">
+            <BarChart3 size={16} className="text-primary-light" /> 7-Day Risk Forecast (AI Simulation)
+          </h2>
+          <div className="h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={[
+                { day: 'Mon', risk: 12, claims: 2 },
+                { day: 'Tue', risk: 18, claims: 3 },
+                { day: 'Wed', risk: 65, claims: 14 },
+                { day: 'Thu', risk: 85, claims: 28 },
+                { day: 'Fri', risk: 45, claims: 12 },
+                { day: 'Sat', risk: 25, claims: 5 },
+                { day: 'Sun', risk: 15, claims: 2 },
+              ]}>
+                <defs>
+                  <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10}} />
+                <YAxis hide />
+                <Tooltip contentStyle={{background: '#0f1d32', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 11}} />
+                <Area type="monotone" dataKey="risk" stroke="#0ea5e9" fillOpacity={1} fill="url(#colorRisk)" strokeWidth={2} name="Disruption Prob. %" />
+                <Area type="monotone" dataKey="claims" stroke="#f43f5e" fill="transparent" strokeWidth={2} strokeDasharray="5 5" name="Est. Claims" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 flex justify-between items-center bg-white/[0.02] p-3 rounded-xl border border-white/5">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-danger animate-pulse" />
+              <span className="text-xs text-slate-300">Monsoon Peak predicted for Thursday (98% confidence)</span>
+            </div>
+            <button className="text-[10px] bg-primary/20 text-primary-light px-3 py-1 rounded-full font-bold uppercase tracking-wider">Adjust Reserves</button>
+          </div>
+        </div>
+
+        <div className="glass-card flex flex-col justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+              <ShieldCheck size={16} className="text-success" /> Reliability Stats
+            </h2>
+            <div className="space-y-4">
+              {[
+                { label: 'Forecast Accuracy', value: '94.2%', trend: '+2.1%', icon: TrendingUp, color: 'text-success' },
+                { label: 'Avg Payout Speed', value: '8.4s', trend: '-1.2s', icon: Zap, color: 'text-primary-light' },
+                { label: 'Prevention Rate', value: '62%', trend: '+5%', icon: ShieldAlert, color: 'text-warning' },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">{s.label}</div>
+                    <div className="text-lg font-bold text-white">{s.value}</div>
+                  </div>
+                  <div className={`text-[10px] font-bold ${s.color} bg-white/[0.05] px-2 py-1 rounded-md flex items-center gap-1`}>
+                    <s.icon size={10} /> {s.trend}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="mt-6 pt-6 border-t border-white/5">
+            <div className="text-[10px] text-slate-500 italic">
+              *Predictive models are updated every 4 hours using multi-source environmental feeds.
             </div>
           </div>
         </div>

@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import {
   Shield, IndianRupee, TrendingUp, AlertTriangle, CloudRain,
   Thermometer, Wind, Clock, CheckCircle2, ArrowUpRight,
-  Zap, Bell, ChevronRight, Activity, Droplets, Eye
+  Zap, Bell, ChevronRight, Activity, Droplets, Eye, BadgeCheck
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   getStore, getCurrentRider, getCurrentPolicy, getRiderClaims,
   setCurrentRider, calculateRiskScore
 } from '../data/store';
+import UPISimulator from '../components/UPISimulator';
 
 export default function WorkerDashboard() {
   const nav = useNavigate();
@@ -21,6 +22,9 @@ export default function WorkerDashboard() {
   const [dbTriggers, setDbTriggers] = useState([]);
   const [isBackend, setIsBackend] = useState(false);
   const [tick, setTick] = useState(0);
+  const [payoutInProgress, setPayoutInProgress] = useState(null); // claim object
+  const [explainingId, setExplainingId] = useState(null);
+  const [explanation, setExplanation] = useState(null);
 
   useEffect(() => {
     const checkBackend = async () => {
@@ -52,10 +56,18 @@ export default function WorkerDashboard() {
   const riskScore = rider ? calculateRiskScore(rider) : 0;
 
   const confirmClaim = async (claimId) => {
+    const claim = claims.find(c => c.id === claimId);
+    if (claim) {
+      setPayoutInProgress(claim);
+    }
+  };
+
+  const handlePayoutComplete = async (txId) => {
+    const claimId = payoutInProgress.id;
     if (isBackend) {
       try {
         const api = await import('../api/client').then(m => m.default);
-        await api.updateClaimStatus(claimId, 'auto_approved');
+        await api.updateClaimStatus(claimId, 'auto_approved'); // This triggers 'paid' on backend
         const cData = await api.getClaims({ riderId: rider?.id });
         setDbClaims(cData.claims || []);
       } catch (e) {
@@ -68,7 +80,26 @@ export default function WorkerDashboard() {
         claim.processedAt = new Date().toISOString();
       }
     }
+    setPayoutInProgress(null);
     setTick(t => t + 1);
+  };
+
+  const handleExplain = async (claimId) => {
+    setExplainingId(claimId);
+    setExplanation(null);
+    try {
+      if (isBackend) {
+        const api = await import('../api/client').then(m => m.default);
+        const data = await api.geminiClaimReason(claimId);
+        setExplanation(data.explanation);
+      } else {
+        // Fallback for mock store
+        const claim = store.claims.find(c => c.id === claimId);
+        setExplanation(`Claim analyzed: ${claim.triggerLabel} in ${claim.city}. System detected parametric breach at 2:00 PM. Verified via platform idle-time telemetry. Payout of ₹${claim.payoutAmount} issued.`);
+      }
+    } catch (e) {
+      setExplanation("Unable to generate analysis at this time. Please check your connectivity.");
+    }
   };
 
   const earningsData = [
@@ -89,6 +120,14 @@ export default function WorkerDashboard() {
 
   return (
     <div className="space-y-5 max-w-6xl">
+      {payoutInProgress && (
+        <UPISimulator 
+          amount={payoutInProgress.payoutAmount} 
+          riderName={rider?.name} 
+          onExhibit={handlePayoutComplete}
+          onClose={() => setPayoutInProgress(null)}
+        />
+      )}
       {/* Welcome */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -172,6 +211,62 @@ export default function WorkerDashboard() {
           </div>
         </div>
       )}
+
+      {/* Phase 3: Intelligent Protection Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Earnings Protected Gauge */}
+        <div className="glass-card overflow-hidden relative group">
+          <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Shield size={60} className="text-primary-light" />
+          </div>
+          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+            <TrendingUp size={16} className="text-success" /> Weekly Earnings Protected
+          </h3>
+          <div className="flex items-end gap-4">
+            <div className="flex-1">
+              <div className="text-3xl font-bold text-white">₹{weeklyProtected.toLocaleString('en-IN')}</div>
+              <div className="text-xs text-slate-400 mt-1">80% of your ₹{rider?.avgWeeklyEarnings?.toLocaleString('en-IN')} target</div>
+            </div>
+            <div className="text-right">
+              <div className="text-lg font-bold text-success">100%</div>
+              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Covered</div>
+            </div>
+          </div>
+          <div className="mt-4 h-2 bg-white/5 rounded-full overflow-hidden">
+            <div className="h-full gradient-primary animate-pulse" style={{ width: '100%', boxShadow: '0 0 10px rgba(14, 165, 233, 0.5)' }} />
+          </div>
+          <p className="text-[10px] text-slate-400 mt-3 flex items-center gap-1">
+            <BadgeCheck size={12} className="text-success" /> Your income is fully secured against weather & platform outages.
+          </p>
+        </div>
+
+        {/* Active Coverage Timer */}
+        <div className="glass-card relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -translate-y-12 translate-x-12" />
+          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+            <Clock size={16} className="text-primary-light" /> Active Weekly Coverage
+          </h3>
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-xl font-bold text-white">{policy?.planName || 'Standard Shield'}</div>
+              <div className="text-xs text-primary-light font-medium mt-1 uppercase tracking-widest">{policy?.status || 'Active'}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-mono font-bold text-white">5d 14h</div>
+              <div className="text-[10px] text-slate-500 uppercase font-bold">Until Renewal</div>
+            </div>
+          </div>
+          <div className="flex gap-1 mt-5">
+            {[1, 1, 1, 1, 1, 0, 0].map((active, i) => (
+              <div key={i} className={`h-1 flex-1 rounded-full ${active ? 'bg-primary' : 'bg-white/10'}`} />
+            ))}
+          </div>
+          <div className="flex justify-between mt-1 text-[9px] text-slate-500">
+            <span>START</span>
+            <span>RENEWAL</span>
+          </div>
+        </div>
+      </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -286,26 +381,49 @@ export default function WorkerDashboard() {
           {claims.length === 0 ? (
             <div className="text-center py-8 text-slate-500 text-sm">No claims yet — you're in the clear! 🎉</div>
           ) : (
-            <div className="space-y-2 max-h-72 overflow-auto">
-              {claims.slice(0, 6).map(c => (
-                <div key={c.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-all">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
-                      c.status === 'paid' || c.status === 'approved' || c.status === 'auto_approved' ? 'bg-success/15 text-success' : c.status === 'suggested' ? 'bg-primary/15 text-primary' : 'bg-warning/15 text-warning'
-                    }`}>
-                      {c.status === 'paid' || c.status === 'approved' || c.status === 'auto_approved' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+            <div className="space-y-4 max-h-[500px] overflow-auto pr-2">
+              {claims.slice(0, 10).map(c => (
+                <div key={c.id} className="space-y-2">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-all">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${
+                        c.status === 'paid' || c.status === 'approved' || c.status === 'auto_approved' ? 'bg-success/15 text-success' : c.status === 'suggested' ? 'bg-primary/15 text-primary' : 'bg-warning/15 text-warning'
+                      }`}>
+                        {c.status === 'paid' || c.status === 'approved' || c.status === 'auto_approved' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-white">{c.triggerLabel}</div>
+                        <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                          <span>{new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                          <span className="w-1 h-1 rounded-full bg-slate-700" />
+                          <span>{c.lostHours}h lost</span>
+                          <button 
+                            onClick={() => handleExplain(c.id)}
+                            className="ml-2 text-[10px] text-primary-light hover:underline flex items-center gap-1"
+                          >
+                            <Zap size={10} /> {explainingId === c.id ? 'Analyzing...' : 'Analyze'}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm font-medium text-white">{c.triggerLabel}</div>
-                      <div className="text-[11px] text-slate-500">{new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} • {c.lostHours}h lost</div>
+                    <div className="text-right">
+                      <div className="text-sm font-bold text-success">+₹{c.payoutAmount}</div>
+                      <div className={`text-[10px] font-bold uppercase ${
+                        c.status === 'paid' ? 'text-success' : c.status === 'approved' || c.status === 'auto_approved' ? 'text-success/70' : c.status === 'suggested' ? 'text-primary-light' : 'text-warning'
+                      }`}>{c.status.replace('_', ' ')}</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-success">+₹{c.payoutAmount}</div>
-                    <div className={`text-[10px] font-bold uppercase ${
-                      c.status === 'paid' ? 'text-success' : c.status === 'approved' || c.status === 'auto_approved' ? 'text-success/70' : c.status === 'suggested' ? 'text-primary-light' : 'text-warning'
-                    }`}>{c.status.replace('_', ' ')}</div>
-                  </div>
+                  
+                  {explainingId === c.id && (explanation || explainingId) && (
+                    <div className="mx-2 p-3 rounded-xl bg-primary/5 border border-primary/10 animate-fade-in">
+                      <div className="flex items-start gap-2">
+                        <BadgeCheck size={14} className="text-primary-light mt-0.5 shrink-0" />
+                        <div className="text-[11px] text-slate-300 italic leading-relaxed">
+                          {explanation || "Connecting to Gemini AI for claim verification..."}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

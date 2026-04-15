@@ -9,6 +9,7 @@ import ClaimsCenter from './pages/ClaimsCenter';
 import AlertsPage from './pages/AlertsPage';
 import AutomationPage from './pages/AutomationPage';
 import AdminDashboard from './pages/AdminDashboard';
+import DemoSimulation from './pages/DemoSimulation';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/automation" element={<AutomationPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/simulation" element={<DemoSimulation />} />
         </Route>
 
         {/* Fallback */}
